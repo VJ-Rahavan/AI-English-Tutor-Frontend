@@ -11,6 +11,14 @@ const API_URL = 'http://localhost:8000/chat';
 
 import Voice from '@react-native-voice/voice';
 
+
+async function loadVoices() {
+  const voices = await Speech.getAvailableVoicesAsync();
+
+  console.log('Voices: ', voices);
+  return voices;
+}
+
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -99,11 +107,16 @@ export default function App() {
 
       console.log(response.data);
 
-      const aiResponse = response.data.response.text ?? response.data.response;
+      const aiResponse = response.reply ?? response.data.reply;
       const aiMsg = { id: Date.now() + 1, text: aiResponse, sender: 'ai' };
 
       setMessages(prev => [...prev, aiMsg]);
-      Speech.speak(aiResponse);
+
+      loadVoices();
+      Speech.speak(aiResponse, {
+        voice: 'com.apple.voice.super-compact.en-US.Samantha',
+        pitch: 1.2,
+      });
 
     } catch (error) {
       console.error('Error sending text:', error);
