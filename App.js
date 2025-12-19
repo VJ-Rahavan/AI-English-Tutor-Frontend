@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, Alert, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, Alert, Platform, PermissionsAndroid } from 'react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,17 +23,36 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gemini');
   const scrollViewRef = useRef();
   // State to hold partial text results
   const [textToProcess, setTextToProcess] = useState('');
 
   useEffect(() => {
     (async () => {
-      // expo-av permissions are still good to ask for, or use Voice permissions logic if strictly needed
-      // usually Voice handles its own permissions on start, but good to be safe.
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Microphone permission is required to use this app.');
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Microphone Permission',
+              message: 'AI Tutor needs access to your microphone so you can talk to it.',
+              buttonNeutral: 'Ask Me Later',
+              buttonNegative: 'Cancel',
+              buttonPositive: 'OK',
+            },
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            Alert.alert('Permission needed', 'Microphone permission is required.');
+          }
+        } catch (err) {
+          console.warn(err);
+        }
+      } else {
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Microphone permission is required to use this app.');
+        }
       }
     })();
 
@@ -101,7 +120,10 @@ export default function App() {
     setTextToProcess('');
     console.log('Sending text to backend: ', text);
     try {
-      const response = await axios.post(API_URL, { text: text }, {
+      const response = await axios.post(API_URL, {
+        text: text,
+        llm_provider: selectedModel
+      }, {
         headers: { 'Content-Type': 'application/json' },
       });
 
@@ -112,9 +134,9 @@ export default function App() {
 
       setMessages(prev => [...prev, aiMsg]);
 
-      loadVoices();
+      const voices = loadVoices();
       Speech.speak(aiResponse, {
-        voice: 'com.apple.voice.super-compact.en-US.Samantha',
+        voice: voices[0]?.identifier ?? 'com.apple.voice.super-compact.en-US.Samantha',
         pitch: 1.2,
       });
 
@@ -153,10 +175,16 @@ export default function App() {
       colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={styles.container}
     >
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>AI Tutor</Text>
           <Text style={styles.headerSubtitle}>Improve your English naturally</Text>
+          <TouchableOpacity
+            style={styles.modelSelector}
+            onPress={() => setSelectedModel(prev => prev === 'gemini' ? 'groq' : 'gemini')}
+          >
+            <Text style={styles.modelSelectorText}>{selectedModel.toUpperCase()}</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -229,6 +257,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#a0a0a0',
     marginTop: 5,
+  },
+  modelSelector: {
+    position: 'absolute',
+    right: 20,
+    top: 40,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  modelSelectorText: {
+    color: '#e94560',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   chatContainer: {
     flex: 1,
